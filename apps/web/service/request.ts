@@ -1,10 +1,10 @@
 import { API_HOST } from '@/lib/constant';
-import { generateDeviceIdHeader, getOrCreateDeviceId } from '@/lib/device';
+import { getOrCreateDeviceId, generateDeviceIdHeader } from '@/lib/device';
 import { getSid } from '@/lib/auth';
 
 // Fetch request wrapper
 export async function request<T = unknown>(url: string, options: RequestInit = {}): Promise<T> {
-  // Get or generate Device ID
+  // Get or generate Device ID, encrypt for header
   let deviceIdHeader = '';
   let sid: string | null = null;
   if (typeof window !== 'undefined') {

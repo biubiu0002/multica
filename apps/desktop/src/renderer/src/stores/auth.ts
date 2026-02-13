@@ -108,14 +108,14 @@ export const useAuthStore = create<AuthState>((set) => ({
  */
 export function setupAuthCallbackListener(): () => void {
   window.electronAPI.auth.onAuthCallback(async (data) => {
-    console.log('[AuthStore] Received auth callback:', data)
     if (data.sid && data.user) {
       useAuthStore.setState({
         sid: data.sid,
         user: data.user,
         isAuthenticated: true,
       })
-      toast.success(`Welcome back, ${data.user.name}`)
+      // Use a fixed ID to prevent duplicate toasts
+      toast.success(`Welcome back, ${data.user.name}`, { id: 'auth-welcome' })
     }
   })
 

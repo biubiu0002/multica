@@ -88,15 +88,14 @@ export default function App() {
   const setCompleted = useOnboardingStore((s) => s.setCompleted)
 
   useEffect(() => {
-    let cleanupAuth: (() => void) | undefined
+    // Setup auth callback listener BEFORE async operations
+    // This ensures cleanup works correctly in React Strict Mode
+    const cleanupAuth = setupAuthCallbackListener()
 
     async function hydrateState() {
       try {
         // Load auth state first
         await useAuthStore.getState().loadAuth()
-
-        // Setup auth callback listener
-        cleanupAuth = setupAuthCallbackListener()
 
         // Load onboarding state
         const completed = await window.electronAPI.appState.getOnboardingCompleted()
@@ -119,7 +118,7 @@ export default function App() {
     useCronJobsStore.getState().fetch()
 
     return () => {
-      cleanupAuth?.()
+      cleanupAuth()
     }
   }, [setCompleted])
 

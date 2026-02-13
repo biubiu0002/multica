@@ -47,13 +47,6 @@ interface AuthFileData {
 const AUTH_FILE_PATH = join(DATA_DIR, "auth.json");
 
 /**
- * Generate a UUID v4 for device identification.
- */
-function generateUUID(): string {
-  return crypto.randomUUID();
-}
-
-/**
  * SHA-256 hash function.
  */
 function sha256(text: string): string {
@@ -61,22 +54,27 @@ function sha256(text: string): string {
 }
 
 /**
- * Generate encrypted Device-Id header value.
- * Algorithm (consistent with Web):
- * 1. SHA-256 hash of deviceId, take first 32 chars
- * 2. SHA-256 hash of step 1 result, take first 8 chars
- * 3. Return: step2[0:8] + step1[0:32] = 40 chars
+ * Generate encrypted Device ID.
+ * Algorithm (consistent with devv-sdk and Web):
+ * 1. Generate UUID
+ * 2. SHA-256 hash of UUID, take first 32 chars
+ * 3. SHA-256 hash of step 2 result, take first 8 chars
+ * 4. Return: step3[0:8] + step2[0:32] = 40 chars
+ *
+ * This encrypted format is stored directly (not the raw UUID).
  */
-export function generateDeviceIdHeader(deviceId: string): string {
-  if (!deviceId || typeof deviceId !== "string") {
-    throw new Error("[Auth] Invalid deviceId for header generation");
-  }
+function generateEncryptedDeviceId(): string {
+  const uuid = crypto.randomUUID();
+  const firstHash = sha256(uuid).slice(0, 32);
+  const finalId = sha256(firstHash).slice(0, 8) + firstHash;
+  return finalId;
+}
 
-  const hash1 = sha256(deviceId);
-  const hashedDeviceId = hash1.slice(0, 32);
-
-  const hash2 = sha256(hashedDeviceId);
-  return hash2.slice(0, 8) + hashedDeviceId;
+/**
+ * Validate device ID format (40 hex characters).
+ */
+function isValidDeviceId(deviceId: string): boolean {
+  return typeof deviceId === "string" && /^[a-f0-9]{40}$/i.test(deviceId);
 }
 
 /**
@@ -125,20 +123,26 @@ function writeAuthFile(data: Partial<AuthFileData>): boolean {
 /**
  * Get or create a persistent Device ID.
  * Device ID persists across logins/logouts - it represents the device, not the user.
+ * The stored value is already encrypted (40 hex chars), not the raw UUID.
  */
 export function getOrCreateDeviceId(): string {
   const existing = readAuthFile();
 
-  // If we have a valid deviceId, return it
-  if (existing?.deviceId && typeof existing.deviceId === "string") {
+  // If we have a valid encrypted deviceId (40 hex chars), return it
+  if (existing?.deviceId && isValidDeviceId(existing.deviceId)) {
     return existing.deviceId;
   }
 
-  // Generate new deviceId and persist it
-  const newDeviceId = generateUUID();
+  // Generate new encrypted deviceId
+  const newDeviceId = generateEncryptedDeviceId();
   console.log("[Auth] Generated new Device ID:", newDeviceId.slice(0, 8) + "...");
 
-  // Preserve any existing auth data while adding deviceId
+  // If there was an old-format deviceId (UUID), we'll replace it
+  if (existing?.deviceId && !isValidDeviceId(existing.deviceId)) {
+    console.log("[Auth] Migrating old-format Device ID to encrypted format");
+  }
+
+  // Preserve any existing auth data while adding/updating deviceId
   const dataToSave: Partial<AuthFileData> = existing
     ? { ...existing, deviceId: newDeviceId }
     : { deviceId: newDeviceId };
@@ -174,10 +178,26 @@ function loadAuthData(): AuthData | null {
   }
 }
 
-function saveAuthData(sid: string, user: AuthUser): boolean {
+/**
+ * Save auth data to disk.
+ * @param sid Session ID
+ * @param user User info
+ * @param passedDeviceId Optional Device ID from Web browser (encrypted 40-char format).
+ *                       If provided and valid, use it; otherwise fall back to local Device ID.
+ */
+function saveAuthData(sid: string, user: AuthUser, passedDeviceId?: string): boolean {
   try {
-    // Ensure we have a deviceId (get existing or create new)
-    const deviceId = getOrCreateDeviceId();
+    // Use passed deviceId from Web if valid, otherwise use local one
+    let deviceId: string;
+    if (passedDeviceId && isValidDeviceId(passedDeviceId)) {
+      deviceId = passedDeviceId;
+      console.log("[Auth] Using Device ID from Web browser:", deviceId.slice(0, 8) + "...");
+    } else {
+      deviceId = getOrCreateDeviceId();
+      if (passedDeviceId) {
+        console.warn("[Auth] Invalid Device ID from Web, using local:", passedDeviceId);
+      }
+    }
 
     const data: AuthFileData = { sid, user, deviceId };
 
@@ -305,6 +325,7 @@ async function createLocalServerSession(): Promise<number> {
         if (url.pathname === "/callback") {
           const sid = url.searchParams.get("sid");
           const userJson = url.searchParams.get("user");
+          const deviceId = url.searchParams.get("deviceId");
 
           // 返回成功页面
           res.writeHead(200, {
@@ -313,7 +334,7 @@ async function createLocalServerSession(): Promise<number> {
           });
           res.end(callbackHtml);
 
-          console.log("[Auth] Parsed params:", { sid, userJson });
+          console.log("[Auth] Parsed params:", { sid, userJson, deviceId: deviceId?.slice(0, 8) + "..." });
 
           if (sid && userJson) {
             try {
@@ -322,17 +343,15 @@ async function createLocalServerSession(): Promise<number> {
               console.log("[Auth] Received auth callback:", {
                 sid: sid.substring(0, 8) + "...",
                 user: user.name,
+                deviceId: deviceId ? deviceId.slice(0, 8) + "..." : "not provided",
               });
 
-              // 保存认证数据
-              saveAuthData(sid, user);
+              // 保存认证数据（使用 Web 传递的 deviceId）
+              saveAuthData(sid, user, deviceId || undefined);
 
               // 通知渲染进程
-              console.log("[Auth] mainWindowRef:", mainWindowRef ? "exists" : "null");
               if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-                console.log("[Auth] Sending auth:callback to renderer...");
-                mainWindowRef.webContents.send("auth:callback", { sid, user });
-                console.log("[Auth] auth:callback sent!");
+                mainWindowRef.webContents.send("auth:callback", { sid, user, deviceId });
                 // 聚焦窗口
                 if (mainWindowRef.isMinimized()) mainWindowRef.restore();
                 mainWindowRef.focus();
@@ -430,7 +449,7 @@ export function handleAuthDeepLink(url: string): void {
       return;
     }
 
-    // multica://auth?sid=xxx&user=xxx
+    // multica://auth?sid=xxx&user=xxx&deviceId=xxx
     if (
       parsedUrl.host === "auth" ||
       parsedUrl.pathname === "//auth" ||
@@ -438,20 +457,22 @@ export function handleAuthDeepLink(url: string): void {
     ) {
       const sid = parsedUrl.searchParams.get("sid");
       const userJson = parsedUrl.searchParams.get("user");
+      const deviceId = parsedUrl.searchParams.get("deviceId");
 
       if (sid && userJson) {
         const user = JSON.parse(decodeURIComponent(userJson)) as AuthUser;
         console.log("[Auth] Deep link auth received:", {
           sid: sid.substring(0, 8) + "...",
           user: user.name,
+          deviceId: deviceId ? deviceId.slice(0, 8) + "..." : "not provided",
         });
 
-        // 保存认证数据
-        saveAuthData(sid, user);
+        // 保存认证数据（使用 Web 传递的 deviceId）
+        saveAuthData(sid, user, deviceId || undefined);
 
         // 通知渲染进程
         if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-          mainWindowRef.webContents.send("auth:callback", { sid, user });
+          mainWindowRef.webContents.send("auth:callback", { sid, user, deviceId });
           if (mainWindowRef.isMinimized()) mainWindowRef.restore();
           mainWindowRef.focus();
         }
@@ -472,9 +493,9 @@ export function registerAuthHandlers(): void {
     return loadAuthData();
   });
 
-  // 保存认证数据
-  ipcMain.handle("auth:save", (_, sid: string, user: AuthUser) => {
-    return saveAuthData(sid, user);
+  // 保存认证数据（支持传入 deviceId）
+  ipcMain.handle("auth:save", (_, sid: string, user: AuthUser, deviceId?: string) => {
+    return saveAuthData(sid, user, deviceId);
   });
 
   // 清除认证数据（登出）
@@ -487,14 +508,13 @@ export function registerAuthHandlers(): void {
     return startLogin();
   });
 
-  // 获取 Device ID（原始值）
+  // 获取 Device ID（已加密的 40 字符格式）
   ipcMain.handle("auth:getDeviceId", () => {
     return getOrCreateDeviceId();
   });
 
-  // 获取加密后的 Device-Id header 值
+  // 获取 Device-Id header 值（与 getDeviceId 相同，已加密）
   ipcMain.handle("auth:getDeviceIdHeader", () => {
-    const deviceId = getOrCreateDeviceId();
-    return generateDeviceIdHeader(deviceId);
+    return getOrCreateDeviceId();
   });
 }

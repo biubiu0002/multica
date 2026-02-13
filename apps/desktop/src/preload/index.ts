@@ -143,9 +143,9 @@ const electronAPI = {
     /** Load auth data from local file */
     load: (): Promise<{ sid: string; user: { uid: string; name: string; email?: string; icon?: string; vip?: number }; deviceId?: string } | null> =>
       ipcRenderer.invoke('auth:load'),
-    /** Save auth data to local file */
-    save: (sid: string, user: { uid: string; name: string; email?: string; icon?: string; vip?: number }): Promise<boolean> =>
-      ipcRenderer.invoke('auth:save', sid, user),
+    /** Save auth data to local file (with optional deviceId from Web) */
+    save: (sid: string, user: { uid: string; name: string; email?: string; icon?: string; vip?: number }, deviceId?: string): Promise<boolean> =>
+      ipcRenderer.invoke('auth:save', sid, user, deviceId),
     /** Clear auth data (logout) */
     clear: (): Promise<boolean> => ipcRenderer.invoke('auth:clear'),
     /** Start login flow (opens browser) */
@@ -154,8 +154,8 @@ const electronAPI = {
     getDeviceId: (): Promise<string> => ipcRenderer.invoke('auth:getDeviceId'),
     /** Get encrypted Device-Id header value for API requests */
     getDeviceIdHeader: (): Promise<string> => ipcRenderer.invoke('auth:getDeviceIdHeader'),
-    /** Listen for auth callback */
-    onAuthCallback: (callback: (data: { sid: string; user: { uid: string; name: string; email?: string; icon?: string; vip?: number } }) => void) => {
+    /** Listen for auth callback (includes deviceId from Web browser) */
+    onAuthCallback: (callback: (data: { sid: string; user: { uid: string; name: string; email?: string; icon?: string; vip?: number }; deviceId?: string }) => void) => {
       ipcRenderer.on('auth:callback', (_event, data) => callback(data))
     },
     /** Remove auth callback listener */

@@ -10,6 +10,7 @@ import { MulticaIcon } from '@multica/ui/components/multica-icon'
 import { LoginAuthType, UserInfo } from '@/lib/interface'
 import { saveSession, isAuthenticated } from '@/lib/auth'
 import { userLogin } from '@/service/user'
+import { getOrCreateDeviceId, generateDeviceIdHeader } from '@/lib/device'
 
 type LoginStep = 'email' | 'code'
 
@@ -103,7 +104,7 @@ export function LoginForm() {
   }, [countdown])
 
   // Handle login success
-  const handleLoginSuccess = (sid: string, user: UserInfo) => {
+  const handleLoginSuccess = async (sid: string, user: UserInfo) => {
     // Save session to cookie for web app
     saveSession(sid, user)
 
@@ -114,9 +115,14 @@ export function LoginForm() {
         const port = nextUrl.searchParams.get('port')
         const platform = nextUrl.searchParams.get('platform') || 'web'
 
+        // Get Device ID and encrypt for Desktop
+        const rawDeviceId = getOrCreateDeviceId()
+        const deviceId = await generateDeviceIdHeader(rawDeviceId)
+
         const params = new URLSearchParams({
           sid,
           user: JSON.stringify(user),
+          deviceId,
         })
 
         if (platform === 'web' && port) {
