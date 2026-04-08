@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Issue } from "@/shared/types";
@@ -8,7 +8,6 @@ import type { Issue } from "@/shared/types";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => "/issues",
-  useSearchParams: () => new URLSearchParams(),
 }));
 
 // Mock next/link
@@ -353,36 +352,5 @@ describe("IssuesPage", () => {
 
     // Should still render the board/list view, not a "no issues" message
     expect(screen.queryByText("No matching issues")).not.toBeInTheDocument();
-  });
-
-  it("does not commit pinyin composition text before IME composition ends", () => {
-    mockStoreState.loading = false;
-    mockStoreState.issues = mockIssues;
-
-    const replaceStateSpy = vi
-      .spyOn(window.history, "replaceState")
-      .mockImplementation(() => undefined);
-
-    render(<IssuesPage />);
-
-    const input = screen.getByLabelText("Search issues");
-
-    fireEvent.compositionStart(input);
-    fireEvent.change(input, { target: { value: "kaihui" } });
-
-    expect(input).toHaveValue("kaihui");
-    expect(replaceStateSpy).not.toHaveBeenCalled();
-
-    fireEvent.change(input, { target: { value: "开会" } });
-    fireEvent.compositionEnd(input, { data: "开会" });
-
-    expect(input).toHaveValue("开会");
-    expect(replaceStateSpy).toHaveBeenCalledWith(
-      null,
-      "",
-      "/issues?q=%E5%BC%80%E4%BC%9A",
-    );
-
-    replaceStateSpy.mockRestore();
   });
 });

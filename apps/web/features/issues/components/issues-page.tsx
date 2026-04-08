@@ -1,56 +1,32 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { ChevronRight, ListTodo } from "lucide-react";
-import type { Issue, IssueStatus } from "@/shared/types";
+import type { IssueStatus } from "@/shared/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useIssueViewStore, initFilterWorkspaceSync } from "@/features/issues/stores/view-store";
 import { useIssuesScopeStore } from "@/features/issues/stores/issues-scope-store";
 import { ViewStoreProvider } from "@/features/issues/stores/view-store-context";
 import { filterIssues } from "@/features/issues/utils/filter";
-import {
-  filterIssuesBySearch,
-  getSearchConstrainedStatuses,
-  parseIssueSearch,
-} from "@/features/issues/utils/search";
-import { ALL_STATUSES, BOARD_STATUSES } from "@/features/issues/config";
+import { BOARD_STATUSES } from "@/features/issues/config";
 import { useWorkspaceStore } from "@/features/workspace";
 import { WorkspaceAvatar } from "@/features/workspace";
 import { useWorkspaceId } from "@core/hooks";
 import { issueListOptions } from "@core/issues/queries";
 import { useUpdateIssue } from "@core/issues/mutations";
-import { api } from "@/shared/api";
 import { useIssueSelectionStore } from "@/features/issues/stores/selection-store";
 import { IssuesHeader } from "./issues-header";
 import { BoardView } from "./board-view";
 import { ListView } from "./list-view";
 import { BatchActionToolbar } from "./batch-action-toolbar";
 
-function mergeIssuesById(base: Issue[] | null, live: Issue[]): Issue[] {
-  const byId = new Map<string, Issue>();
-
-  for (const issue of base ?? []) {
-    byId.set(issue.id, issue);
-  }
-
-  for (const issue of live) {
-    byId.set(issue.id, issue);
-  }
-
-  return Array.from(byId.values());
-}
-
 export function IssuesPage() {
   const wsId = useWorkspaceId();
   const { data: allIssues = [], isLoading: loading } = useQuery(issueListOptions(wsId));
-  const searchParams = useSearchParams();
-  const urlSearchQuery = searchParams.get("q") ?? "";
+
   const workspace = useWorkspaceStore((s) => s.workspace);
-  const members = useWorkspaceStore((s) => s.members);
-  const agents = useWorkspaceStore((s) => s.agents);
   const scope = useIssuesScopeStore((s) => s.scope);
   const viewMode = useIssueViewStore((s) => s.viewMode);
   const statusFilters = useIssueViewStore((s) => s.statusFilters);
@@ -58,171 +34,38 @@ export function IssuesPage() {
   const assigneeFilters = useIssueViewStore((s) => s.assigneeFilters);
   const includeNoAssignee = useIssueViewStore((s) => s.includeNoAssignee);
   const creatorFilters = useIssueViewStore((s) => s.creatorFilters);
-  const [searchInputValue, setSearchInputValue] = useState(urlSearchQuery);
-  const [searchQuery, setSearchQueryState] = useState(urlSearchQuery);
-  const isSearchComposingRef = useRef(false);
-  const [searchPool, setSearchPool] = useState<Issue[] | null>(null);
-  const [searchPoolWorkspaceId, setSearchPoolWorkspaceId] = useState<string | null>(null);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const deferredSearchQuery = useDeferredValue(searchQuery);
-  const hasActiveSearch = deferredSearchQuery.trim().length > 0;
-  const hasActiveFilters =
-    statusFilters.length > 0 ||
-    priorityFilters.length > 0 ||
-    assigneeFilters.length > 0 ||
-    includeNoAssignee ||
-    creatorFilters.length > 0;
-
-  const replaceSearchUrl = useCallback((nextQuery: string) => {
-    const params = new URLSearchParams(window.location.search);
-    if (nextQuery.trim()) {
-      params.set("q", nextQuery);
-    } else {
-      params.delete("q");
-    }
-
-    const next = params.toString();
-    window.history.replaceState(null, "", next ? `/issues?${next}` : "/issues");
-  }, []);
-
-  const applySearchQuery = useCallback((nextQuery: string) => {
-    setSearchQueryState(nextQuery);
-    replaceSearchUrl(nextQuery);
-  }, [replaceSearchUrl]);
-
-  const handleSearchInputChange = useCallback((nextQuery: string) => {
-    setSearchInputValue(nextQuery);
-    if (!isSearchComposingRef.current) {
-      applySearchQuery(nextQuery);
-    }
-  }, [applySearchQuery]);
-
-  const handleSearchCompositionStart = useCallback(() => {
-    isSearchComposingRef.current = true;
-  }, []);
-
-  const handleSearchCompositionEnd = useCallback((nextQuery: string) => {
-    isSearchComposingRef.current = false;
-    setSearchInputValue(nextQuery);
-    applySearchQuery(nextQuery);
-  }, [applySearchQuery]);
 
   useEffect(() => {
     initFilterWorkspaceSync();
   }, []);
 
   useEffect(() => {
-    setSearchInputValue(urlSearchQuery);
-    setSearchQueryState(urlSearchQuery);
-  }, [urlSearchQuery]);
-
-  useEffect(() => {
-    setSearchPool(null);
-    setSearchPoolWorkspaceId(null);
-  }, [workspace?.id]);
-
-  useEffect(() => {
-    if (!hasActiveSearch || !workspace?.id) return;
-    if (searchPool && searchPoolWorkspaceId === workspace.id) return;
-
-    let cancelled = false;
-    setSearchLoading(true);
-
-    api.listIssues({ all: true })
-      .then((res) => {
-        if (cancelled) return;
-        setSearchPool(res.issues);
-        setSearchPoolWorkspaceId(workspace.id);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.error(error);
-        toast.error("Failed to search all issues");
-      })
-      .finally(() => {
-        if (!cancelled) setSearchLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [hasActiveSearch, searchPool, searchPoolWorkspaceId, workspace?.id]);
-
-  useEffect(() => {
     useIssueSelectionStore.getState().clear();
-  }, [viewMode, scope, deferredSearchQuery]);
-
-  const parsedSearch = useMemo(
-    () => parseIssueSearch(deferredSearchQuery, { members, agents }),
-    [agents, deferredSearchQuery, members],
-  );
-
-  const searchableIssues = useMemo(() => {
-    if (!hasActiveSearch) return allIssues;
-    if (searchPoolWorkspaceId !== workspace?.id) return allIssues;
-    return mergeIssuesById(searchPool, allIssues);
-  }, [allIssues, hasActiveSearch, searchPool, searchPoolWorkspaceId, workspace?.id]);
+  }, [viewMode, scope]);
 
   // Scope pre-filter: narrow by assignee type
   const scopedIssues = useMemo(() => {
     if (scope === "members")
-      return searchableIssues.filter((i) => i.assignee_type === "member");
+      return allIssues.filter((i) => i.assignee_type === "member");
     if (scope === "agents")
-      return searchableIssues.filter((i) => i.assignee_type === "agent");
-    return searchableIssues;
-  }, [scope, searchableIssues]);
-
-  const filteredIssues = useMemo(
-    () =>
-      filterIssues(scopedIssues, {
-        statusFilters,
-        priorityFilters,
-        assigneeFilters,
-        includeNoAssignee,
-        creatorFilters,
-      }),
-    [
-      assigneeFilters,
-      creatorFilters,
-      includeNoAssignee,
-      priorityFilters,
-      scopedIssues,
-      statusFilters,
-    ],
-  );
+      return allIssues.filter((i) => i.assignee_type === "agent");
+    return allIssues;
+  }, [allIssues, scope]);
 
   const issues = useMemo(
-    () => filterIssuesBySearch(filteredIssues, parsedSearch, { members, agents }),
-    [agents, filteredIssues, members, parsedSearch],
+    () => filterIssues(scopedIssues, { statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters }),
+    [scopedIssues, statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters],
   );
 
   const visibleStatuses = useMemo(() => {
-    const explicitSearchStatuses = getSearchConstrainedStatuses(parsedSearch);
-    const explicitStatuses =
-      statusFilters.length > 0 || explicitSearchStatuses
-        ? ALL_STATUSES.filter((status) => {
-            if (statusFilters.length > 0 && !statusFilters.includes(status)) {
-              return false;
-            }
-            if (explicitSearchStatuses && !explicitSearchStatuses.includes(status)) {
-              return false;
-            }
-            return true;
-          })
-        : null;
-
-    if (explicitStatuses) return explicitStatuses;
-    if (hasActiveSearch) {
-      const resultStatuses = new Set(issues.map((issue) => issue.status));
-      return ALL_STATUSES.filter((status) => resultStatuses.has(status));
-    }
+    if (statusFilters.length > 0)
+      return BOARD_STATUSES.filter((s) => statusFilters.includes(s));
     return BOARD_STATUSES;
-  }, [hasActiveSearch, issues, parsedSearch, statusFilters]);
+  }, [statusFilters]);
 
   const hiddenStatuses = useMemo(() => {
-    if (hasActiveSearch) return [];
     return BOARD_STATUSES.filter((s) => !visibleStatuses.includes(s));
-  }, [hasActiveSearch, visibleStatuses]);
+  }, [visibleStatuses]);
 
   const updateIssueMutation = useUpdateIssue();
   const handleMoveIssue = useCallback(
@@ -284,38 +127,22 @@ export function IssuesPage() {
       </div>
 
       {/* Header 2: Scope tabs + filters */}
-      <IssuesHeader
-        scopedIssues={scopedIssues}
-        searchQuery={searchInputValue}
-        searchLoading={searchLoading}
-        resultCount={issues.length}
-        onSearchQueryChange={handleSearchInputChange}
-        onSearchCompositionStart={handleSearchCompositionStart}
-        onSearchCompositionEnd={handleSearchCompositionEnd}
-      />
+      <IssuesHeader scopedIssues={scopedIssues} />
 
       {/* Content: scrollable */}
       <ViewStoreProvider store={useIssueViewStore}>
-        {scopedIssues.length === 0 && !hasActiveSearch && !hasActiveFilters ? (
+        {scopedIssues.length === 0 ? (
           <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-2 text-muted-foreground">
             <ListTodo className="h-10 w-10 text-muted-foreground/40" />
             <p className="text-sm">No issues yet</p>
             <p className="text-xs">Create an issue to get started.</p>
-          </div>
-        ) : issues.length === 0 ? (
-          <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-2 text-muted-foreground">
-            <ListTodo className="h-10 w-10 text-muted-foreground/40" />
-            <p className="text-sm">No issues match this search</p>
-            <p className="text-xs">
-              Try `#123`, `status:done`, `assignee:alice`, or looser keywords.
-            </p>
           </div>
         ) : (
           <div className="flex flex-col flex-1 min-h-0">
             {viewMode === "board" ? (
               <BoardView
                 issues={issues}
-                allIssues={issues}
+                allIssues={scopedIssues}
                 visibleStatuses={visibleStatuses}
                 hiddenStatuses={hiddenStatuses}
                 onMoveIssue={handleMoveIssue}

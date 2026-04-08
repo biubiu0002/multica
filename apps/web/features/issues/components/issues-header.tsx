@@ -9,15 +9,12 @@ import {
   CircleDot,
   Columns3,
   Filter,
-  LoaderCircle,
   List,
-  Search,
   SignalHigh,
   SlidersHorizontal,
   User,
   UserMinus,
   UserPen,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,13 +35,6 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-  InputGroupText,
-} from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
 import {
   ALL_STATUSES,
@@ -285,23 +275,7 @@ function ActorSubContent({
 // IssuesHeader
 // ---------------------------------------------------------------------------
 
-export function IssuesHeader({
-  scopedIssues,
-  searchQuery,
-  searchLoading,
-  resultCount,
-  onSearchQueryChange,
-  onSearchCompositionStart,
-  onSearchCompositionEnd,
-}: {
-  scopedIssues: Issue[];
-  searchQuery: string;
-  searchLoading: boolean;
-  resultCount: number;
-  onSearchQueryChange: (value: string) => void;
-  onSearchCompositionStart: () => void;
-  onSearchCompositionEnd: (value: string) => void;
-}) {
+export function IssuesHeader({ scopedIssues }: { scopedIssues: Issue[] }) {
   const scope = useIssuesScopeStore((s) => s.scope);
   const setScope = useIssuesScopeStore((s) => s.setScope);
 
@@ -331,9 +305,9 @@ export function IssuesHeader({
     SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? "Manual";
 
   return (
-    <div className="flex h-12 shrink-0 items-center gap-3 px-4">
+    <div className="flex h-12 shrink-0 items-center justify-between px-4">
       {/* Left: scope buttons */}
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex items-center gap-1">
         {SCOPES.map((s) => (
           <Tooltip key={s.value}>
             <TooltipTrigger
@@ -357,43 +331,8 @@ export function IssuesHeader({
         ))}
       </div>
 
-      <div className="min-w-0 flex-1 lg:max-w-xl">
-        <InputGroup className="h-9 border-input/70 bg-background">
-          <InputGroupAddon>
-            <Search className="size-4" />
-          </InputGroupAddon>
-          <InputGroupInput
-            value={searchQuery}
-            onChange={(event) => onSearchQueryChange(event.target.value)}
-            onCompositionStart={onSearchCompositionStart}
-            onCompositionEnd={(event) => onSearchCompositionEnd(event.currentTarget.value)}
-            placeholder="Search issues, #123, status:done, assignee:alice"
-            aria-label="Search issues"
-          />
-          <InputGroupAddon align="inline-end" className="gap-1">
-            {searchLoading ? (
-              <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />
-            ) : searchQuery ? (
-              <InputGroupText className="hidden text-xs md:flex">
-                {resultCount} {resultCount === 1 ? "match" : "matches"}
-              </InputGroupText>
-            ) : null}
-            {searchQuery ? (
-              <InputGroupButton
-                size="icon-xs"
-                variant="ghost"
-                aria-label="Clear search"
-                onClick={() => onSearchQueryChange("")}
-              >
-                <X className="size-3.5" />
-              </InputGroupButton>
-            ) : null}
-          </InputGroupAddon>
-        </InputGroup>
-      </div>
-
       {/* Right: filter + display + view toggle */}
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex items-center gap-1">
         {/* Filter */}
         <DropdownMenu>
           <Tooltip>

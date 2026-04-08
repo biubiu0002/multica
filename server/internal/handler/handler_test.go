@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -298,57 +297,6 @@ func TestCommentCRUD(t *testing.T) {
 	req = newRequest("DELETE", "/api/issues/"+issueID, nil)
 	req = withURLParam(req, "id", issueID)
 	testHandler.DeleteIssue(w, req)
-}
-
-func TestListIssuesAllIgnoresPagination(t *testing.T) {
-	createdIDs := make([]string, 0, 3)
-
-	for i := 0; i < 3; i++ {
-		w := httptest.NewRecorder()
-		req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-			"title": "Searchable issue " + strconv.Itoa(i+1),
-		})
-		testHandler.CreateIssue(w, req)
-		if w.Code != http.StatusCreated {
-			t.Fatalf("CreateIssue: expected 201, got %d: %s", w.Code, w.Body.String())
-		}
-
-		var issue IssueResponse
-		json.NewDecoder(w.Body).Decode(&issue)
-		createdIDs = append(createdIDs, issue.ID)
-	}
-
-	t.Cleanup(func() {
-		for _, issueID := range createdIDs {
-			w := httptest.NewRecorder()
-			req := newRequest("DELETE", "/api/issues/"+issueID, nil)
-			req = withURLParam(req, "id", issueID)
-			testHandler.DeleteIssue(w, req)
-		}
-	})
-
-	w := httptest.NewRecorder()
-	req := newRequest("GET", "/api/issues?workspace_id="+testWorkspaceID+"&all=true&limit=1", nil)
-	testHandler.ListIssues(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("ListIssues(all=true): expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-
-	var listResp struct {
-		Issues []IssueResponse `json:"issues"`
-		Total  int             `json:"total"`
-	}
-	if err := json.NewDecoder(w.Body).Decode(&listResp); err != nil {
-		t.Fatalf("ListIssues(all=true): decode response: %v", err)
-	}
-
-	if len(listResp.Issues) < 3 {
-		t.Fatalf("ListIssues(all=true): expected at least 3 issues, got %d", len(listResp.Issues))
-	}
-
-	if listResp.Total != len(listResp.Issues) {
-		t.Fatalf("ListIssues(all=true): expected total %d, got %d", len(listResp.Issues), listResp.Total)
-	}
 }
 
 func TestAgentCRUD(t *testing.T) {

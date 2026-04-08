@@ -167,7 +167,6 @@ export class ApiClient {
     const search = new URLSearchParams();
     if (params?.limit) search.set("limit", String(params.limit));
     if (params?.offset) search.set("offset", String(params.offset));
-    if (params?.all) search.set("all", "true");
     const wsId = params?.workspace_id ?? this.workspaceId;
     if (wsId) search.set("workspace_id", wsId);
     if (params?.status) search.set("status", params.status);

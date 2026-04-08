@@ -28,7 +28,6 @@ export interface UpdateIssueRequest {
 export interface ListIssuesParams {
   limit?: number;
   offset?: number;
-  all?: boolean;
   workspace_id?: string;
   status?: IssueStatus;
   priority?: IssuePriority;

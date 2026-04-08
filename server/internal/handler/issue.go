@@ -103,31 +103,6 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.URL.Query().Get("all") == "true" {
-		issues, err := h.Queries.ListAllIssues(ctx, db.ListAllIssuesParams{
-			WorkspaceID: wsUUID,
-			Status:      statusFilterFromQuery(r),
-			Priority:    priorityFilter,
-			AssigneeID:  assigneeFilter,
-		})
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to list issues")
-			return
-		}
-
-		prefix := h.getIssuePrefix(ctx, wsUUID)
-		resp := make([]IssueResponse, len(issues))
-		for i, issue := range issues {
-			resp[i] = issueToResponse(issue, prefix)
-		}
-
-		writeJSON(w, http.StatusOK, map[string]any{
-			"issues": resp,
-			"total":  len(resp),
-		})
-		return
-	}
-
 	limit := 100
 	offset := 0
 	if l := r.URL.Query().Get("limit"); l != "" {
@@ -141,7 +116,10 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	statusFilter := statusFilterFromQuery(r)
+	var statusFilter pgtype.Text
+	if s := r.URL.Query().Get("status"); s != "" {
+		statusFilter = pgtype.Text{String: s, Valid: true}
+	}
 
 	issues, err := h.Queries.ListIssues(ctx, db.ListIssuesParams{
 		WorkspaceID: wsUUID,
@@ -177,14 +155,6 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		"issues": resp,
 		"total":  total,
 	})
-}
-
-func statusFilterFromQuery(r *http.Request) pgtype.Text {
-	var statusFilter pgtype.Text
-	if s := r.URL.Query().Get("status"); s != "" {
-		statusFilter = pgtype.Text{String: s, Valid: true}
-	}
-	return statusFilter
 }
 
 func (h *Handler) GetIssue(w http.ResponseWriter, r *http.Request) {
