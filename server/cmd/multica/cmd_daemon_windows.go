@@ -18,7 +18,10 @@ const (
 )
 
 func daemonSysProcAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{CreationFlags: createNewProcessGroup}
+	return &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: createNewProcessGroup,
+	}
 }
 
 func stopDaemonProcess(process *os.Process) error {
