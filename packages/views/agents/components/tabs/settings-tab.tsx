@@ -10,6 +10,10 @@ import {
   Lock,
   Camera,
   ChevronDown,
+  Plus,
+  Trash2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import type { Agent, AgentVisibility, RuntimeDevice } from "@multica/core/types";
 import {
@@ -24,6 +28,31 @@ import { toast } from "sonner";
 import { api } from "@multica/core/api";
 import { useFileUpload } from "@multica/core/hooks/use-file-upload";
 import { ActorAvatar } from "../../../common/actor-avatar";
+
+interface EnvEntry {
+  key: string;
+  value: string;
+  visible: boolean;
+}
+
+function envMapToEntries(env: Record<string, string>): EnvEntry[] {
+  return Object.entries(env).map(([key, value]) => ({
+    key,
+    value,
+    visible: false,
+  }));
+}
+
+function entriesToEnvMap(entries: EnvEntry[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const entry of entries) {
+    const key = entry.key.trim();
+    if (key) {
+      map[key] = entry.value;
+    }
+  }
+  return map;
+}
 
 export function SettingsTab({
   agent,
@@ -41,6 +70,9 @@ export function SettingsTab({
   const [selectedRuntimeId, setSelectedRuntimeId] = useState(agent.runtime_id);
   const [runtimeOpen, setRuntimeOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [envEntries, setEnvEntries] = useState<EnvEntry[]>(
+    envMapToEntries(agent.custom_env ?? {})
+  );
   const { upload, uploading } = useFileUpload(api);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,18 +92,32 @@ export function SettingsTab({
     }
   };
 
+  const currentEnvMap = entriesToEnvMap(envEntries);
+  const originalEnvMap = agent.custom_env ?? {};
+  const envDirty =
+    JSON.stringify(currentEnvMap) !== JSON.stringify(originalEnvMap);
+
   const dirty =
     name !== agent.name ||
     description !== (agent.description ?? "") ||
     visibility !== agent.visibility ||
     maxTasks !== agent.max_concurrent_tasks ||
-    selectedRuntimeId !== agent.runtime_id;
+    selectedRuntimeId !== agent.runtime_id ||
+    envDirty;
 
   const handleSave = async () => {
     if (!name.trim()) {
       toast.error("Name is required");
       return;
     }
+    // Validate env var keys
+    const keys = envEntries.filter((e) => e.key.trim()).map((e) => e.key.trim());
+    const uniqueKeys = new Set(keys);
+    if (uniqueKeys.size < keys.length) {
+      toast.error("Duplicate environment variable keys");
+      return;
+    }
+
     setSaving(true);
     try {
       await onSave({
@@ -80,6 +126,7 @@ export function SettingsTab({
         visibility,
         max_concurrent_tasks: maxTasks,
         runtime_id: selectedRuntimeId,
+        custom_env: currentEnvMap,
       });
       toast.success("Settings saved");
     } catch {
@@ -87,6 +134,34 @@ export function SettingsTab({
     } finally {
       setSaving(false);
     }
+  };
+
+  const addEnvEntry = () => {
+    setEnvEntries([...envEntries, { key: "", value: "", visible: true }]);
+  };
+
+  const removeEnvEntry = (index: number) => {
+    setEnvEntries(envEntries.filter((_, i) => i !== index));
+  };
+
+  const updateEnvEntry = (
+    index: number,
+    field: "key" | "value",
+    val: string
+  ) => {
+    setEnvEntries(
+      envEntries.map((entry, i) =>
+        i === index ? { ...entry, [field]: val } : entry
+      )
+    );
+  };
+
+  const toggleEnvVisibility = (index: number) => {
+    setEnvEntries(
+      envEntries.map((entry, i) =>
+        i === index ? { ...entry, visible: !entry.visible } : entry
+      )
+    );
   };
 
   return (
@@ -255,6 +330,71 @@ export function SettingsTab({
             ))}
           </PopoverContent>
         </Popover>
+      </div>
+
+      {/* Environment Variables */}
+      <div>
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-xs text-muted-foreground">Environment Variables</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Injected into the agent process at launch (e.g. ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL)
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addEnvEntry}
+            className="h-7 gap-1 text-xs"
+          >
+            <Plus className="h-3 w-3" />
+            Add
+          </Button>
+        </div>
+        {envEntries.length > 0 && (
+          <div className="mt-2 space-y-2">
+            {envEntries.map((entry, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <Input
+                  value={entry.key}
+                  onChange={(e) => updateEnvEntry(index, "key", e.target.value)}
+                  placeholder="KEY"
+                  className="w-[40%] font-mono text-xs"
+                />
+                <div className="relative flex-1">
+                  <Input
+                    type={entry.visible ? "text" : "password"}
+                    value={entry.value}
+                    onChange={(e) =>
+                      updateEnvEntry(index, "value", e.target.value)
+                    }
+                    placeholder="value"
+                    className="pr-8 font-mono text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleEnvVisibility(index)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {entry.visible ? (
+                      <EyeOff className="h-3.5 w-3.5" />
+                    ) : (
+                      <Eye className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeEnvEntry(index)}
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <Button onClick={handleSave} disabled={!dirty || saving} size="sm">
