@@ -22,6 +22,7 @@ function CallbackContent() {
   const searchParams = useSearchParams();
   const qc = useQueryClient();
   const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
+  const loginWithFeishu = useAuthStore((s) => s.loginWithFeishu);
   const hydrateWorkspace = useWorkspaceStore((s) => s.hydrateWorkspace);
   const [error, setError] = useState("");
   const [desktopToken, setDesktopToken] = useState<string | null>(null);
@@ -40,17 +41,22 @@ function CallbackContent() {
     }
 
     const state = searchParams.get("state") || "";
-    const stateParts = state.split(",");
+    const stateParts = state.split(",").filter(Boolean);
+    const providerPart = stateParts.find((p) => p.startsWith("provider:"));
+    const provider = providerPart?.slice(9) || "google";
     const isDesktop = stateParts.includes("platform:desktop");
     const nextPart = stateParts.find((p) => p.startsWith("next:"));
     const nextUrl = nextPart ? nextPart.slice(5) : null; // strip "next:" prefix
 
     const redirectUri = `${window.location.origin}/auth/callback`;
+    const completeWebLogin = provider === "feishu" ? loginWithFeishu : loginWithGoogle;
+    const exchangeDesktopToken = provider === "feishu"
+      ? api.feishuLogin.bind(api)
+      : api.googleLogin.bind(api);
 
     if (isDesktop) {
       // Desktop flow: exchange code for token, then redirect via deep link
-      api
-        .googleLogin(code, redirectUri)
+      exchangeDesktopToken(code, redirectUri)
         .then(({ token }) => {
           setDesktopToken(token);
           window.location.href = `multica://auth/callback?token=${encodeURIComponent(token)}`;
@@ -60,7 +66,7 @@ function CallbackContent() {
         });
     } else {
       // Normal web flow
-      loginWithGoogle(code, redirectUri)
+      completeWebLogin(code, redirectUri)
         .then(async () => {
           const wsList = await api.listWorkspaces();
           qc.setQueryData(workspaceKeys.list(), wsList);
@@ -74,7 +80,7 @@ function CallbackContent() {
           setError(err instanceof Error ? err.message : "Login failed");
         });
     }
-  }, [searchParams, loginWithGoogle, hydrateWorkspace, router, qc]);
+  }, [searchParams, loginWithFeishu, loginWithGoogle, hydrateWorkspace, router, qc]);
 
   if (desktopToken) {
     return (

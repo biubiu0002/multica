@@ -8,6 +8,7 @@ import { setLoggedInCookie } from "@/features/auth/auth-cookie";
 import { LoginPage, validateCliCallback } from "@multica/views/auth";
 
 const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const feishuClientId = process.env.NEXT_PUBLIC_FEISHU_APP_ID;
 
 function LoginPageContent() {
   const router = useRouter();
@@ -18,6 +19,7 @@ function LoginPageContent() {
   const cliCallbackRaw = searchParams.get("cli_callback");
   const cliState = searchParams.get("cli_state") || "";
   const platform = searchParams.get("platform");
+  const provider = searchParams.get("provider");
   const nextUrl = searchParams.get("next") || "/issues";
 
   // Already authenticated — redirect to dashboard (skip if CLI callback)
@@ -37,14 +39,14 @@ function LoginPageContent() {
     router.push(ws ? nextUrl : "/onboarding");
   };
 
-  // Build Google OAuth state: encode platform + next URL so the callback
-  // can redirect to the right place after login.
-  const googleState = [
-    platform === "desktop" ? "platform:desktop" : "",
-    nextUrl !== "/issues" ? `next:${nextUrl}` : "",
-  ]
-    .filter(Boolean)
-    .join(",") || undefined;
+  const buildProviderState = (providerName: "google" | "feishu") =>
+    [
+      `provider:${providerName}`,
+      platform === "desktop" ? "platform:desktop" : "",
+      nextUrl !== "/issues" ? `next:${nextUrl}` : "",
+    ]
+      .filter(Boolean)
+      .join(",") || undefined;
 
   return (
     <LoginPage
@@ -54,7 +56,16 @@ function LoginPageContent() {
           ? {
               clientId: googleClientId,
               redirectUri: `${window.location.origin}/auth/callback`,
-              state: googleState,
+              state: buildProviderState("google"),
+            }
+          : undefined
+      }
+      feishu={
+        feishuClientId
+          ? {
+              clientId: feishuClientId,
+              redirectUri: `${window.location.origin}/auth/callback`,
+              state: buildProviderState("feishu"),
             }
           : undefined
       }
@@ -65,6 +76,11 @@ function LoginPageContent() {
       }
       lastWorkspaceId={lastWorkspaceId}
       onTokenObtained={setLoggedInCookie}
+      autoStartProvider={
+        provider === "google" || provider === "feishu"
+          ? provider
+          : undefined
+      }
     />
   );
 }

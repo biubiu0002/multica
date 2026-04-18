@@ -7,10 +7,16 @@ export function DesktopLoginPage() {
   const lastWorkspaceId = localStorage.getItem("multica_workspace_id");
 
   const handleGoogleLogin = () => {
-    // Open web login page in the default browser with platform=desktop flag.
-    // The web callback will redirect back via multica:// deep link with the token.
+    // Open the hosted login page in the default browser. The callback page
+    // will redirect back via multica:// deep link with the token.
     window.desktopAPI.openExternal(
-      `${WEB_URL}/login?platform=desktop`,
+      `${WEB_URL}/login?platform=desktop&provider=google`,
+    );
+  };
+
+  const handleFeishuLogin = () => {
+    window.desktopAPI.openExternal(
+      `${WEB_URL}/login?platform=desktop&provider=feishu`,
     );
   };
 
@@ -28,6 +34,7 @@ export function DesktopLoginPage() {
           // Auth store update triggers AppContent re-render → shows DesktopShell
         }}
         onGoogleLogin={handleGoogleLogin}
+        onFeishuLogin={handleFeishuLogin}
       />
     </div>
   );
