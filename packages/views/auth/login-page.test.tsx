@@ -107,6 +107,28 @@ describe("LoginPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("can render a Feishu-only primary login step", () => {
+    render(
+      <LoginPage
+        onSuccess={onSuccess}
+        emailLogin={false}
+        feishu={{
+          clientId: "feishu-client-id",
+          redirectUri: "http://localhost:3000/auth/callback",
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/sign in to multica/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/enter your email to get a login code/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /continue with feishu/i }),
+    ).toBeInTheDocument();
+  });
+
   // -------------------------------------------------------------------------
   // Email validation
   // -------------------------------------------------------------------------

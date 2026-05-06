@@ -61,6 +61,10 @@ interface LoginPageProps {
   onFeishuLogin?: () => void;
   /** When set, automatically starts the selected OAuth login once the page is ready. */
   autoStartProvider?: "google" | "feishu";
+  /** Whether to show the direct email-code login form on the primary login step. */
+  emailLogin?: boolean;
+  /** Optional helper text shown on email-code verification screens. */
+  verificationCodeHint?: string;
   /** Slot rendered at the bottom of the sign-in card, below the OAuth buttons. */
   extra?: ReactNode;
   /** Feishu email binding session (user has no email, needs to input one). */
@@ -115,6 +119,8 @@ export function LoginPage({
   onGoogleLogin,
   onFeishuLogin,
   autoStartProvider,
+  emailLogin = true,
+  verificationCodeHint,
   extra,
   bindEmail,
 }: LoginPageProps) {
@@ -447,6 +453,11 @@ export function LoginPage({
               We sent a verification code to{" "}
               <span className="font-medium text-foreground">{email}</span>
             </CardDescription>
+            {verificationCodeHint && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {verificationCodeHint}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-4">
             <InputOTP
@@ -515,6 +526,11 @@ export function LoginPage({
               We sent a verification code to{" "}
               <span className="font-medium text-foreground">{email}</span>
             </CardDescription>
+            {verificationCodeHint && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {verificationCodeHint}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-4">
             <InputOTP
@@ -622,6 +638,45 @@ export function LoginPage({
   // -------------------------------------------------------------------------
   // Email step
   // -------------------------------------------------------------------------
+
+  if (!emailLogin) {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <Card className="w-full max-w-sm">
+          <CardHeader className="text-center">
+            {logo && <div className="mx-auto mb-4">{logo}</div>}
+            <CardTitle className="text-2xl">Sign in to Multica</CardTitle>
+            <CardDescription>
+              Continue with Feishu to access this workspace.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex flex-col gap-3">
+            {feishu || onFeishuLogin ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                size="lg"
+                onClick={handleFeishuLogin}
+                disabled={loading}
+              >
+                <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="4" fill="#00C45A" />
+                  <path d="M8 9.5h8M8 13h5" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                Continue with Feishu
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Feishu login is not configured for this deployment.
+              </p>
+            )}
+            {extra && <div className="w-full pt-1 text-center">{extra}</div>}
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-svh items-center justify-center">

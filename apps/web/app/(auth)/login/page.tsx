@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { sanitizeNextUrl, useAuthStore } from "@multica/core/auth";
-import { useConfigStore } from "@multica/core/config";
 import { workspaceKeys } from "@multica/core/workspace/queries";
 import {
   paths,
@@ -58,7 +57,6 @@ async function resolveLoggedInDestination(
 function LoginPageContent() {
   const router = useRouter();
   const qc = useQueryClient();
-  const googleClientId = useConfigStore((state) => state.googleClientId);
   const user = useAuthStore((s) => s.user);
   const isLoading = useAuthStore((s) => s.isLoading);
   const searchParams = useSearchParams();
@@ -184,15 +182,6 @@ function LoginPageContent() {
   return (
     <LoginPage
       onSuccess={handleSuccess}
-      google={
-        googleClientId
-          ? {
-              clientId: googleClientId,
-              redirectUri: `${window.location.origin}/auth/callback`,
-              state: buildProviderState("google"),
-            }
-          : undefined
-      }
       feishu={
         feishuClientId
           ? {
@@ -218,8 +207,10 @@ function LoginPageContent() {
       }
       onTokenObtained={setLoggedInCookie}
       autoStartProvider={
-        provider === "google" || provider === "feishu" ? provider : undefined
+        provider === "feishu" ? provider : undefined
       }
+      emailLogin={false}
+      verificationCodeHint="当前测试环境默认验证码：888888"
       extra={
         // Web-only nudge toward the desktop app. Copy is hardcoded EN
         // for now because the login route sits outside the landing
