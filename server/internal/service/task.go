@@ -871,9 +871,10 @@ func (s *TaskService) FailTask(ctx context.Context, taskID pgtype.UUID, errMsg, 
 // etc.) are intentionally excluded — those are real problems that the user
 // should see, not infrastructure flakiness.
 var retryableReasons = map[string]bool{
-	"runtime_offline":  true,
-	"runtime_recovery": true,
-	"timeout":          true,
+	"runtime_offline":   true,
+	"runtime_recovery":  true,
+	"timeout":           true,
+	"provider_capacity": true,
 }
 
 // MaybeRetryFailedTask spawns a fresh queued attempt for a recently-failed
